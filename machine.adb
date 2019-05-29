@@ -209,14 +209,9 @@ package body Machine with SPARK_Mode is
       
    begin
       PC := ProgramCounter'First;
---        Result := 0;
+      
       while (CycleCount < Cycles and Ret = Success) loop
          Inst := Prog(PC);
-         
-         -- debug print pc and current instruction
---           Put(Integer(PC)); Put(':'); Put(Ada.Characters.Latin_1.HT);
---           DebugPrintInstr(Inst);
---           New_Line;
          
          case Inst.Op is
             when ADD =>
