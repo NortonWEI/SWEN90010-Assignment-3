@@ -218,6 +218,11 @@ package body Machine with SPARK_Mode is
       Inst : Instr;
       Ret : ReturnCode := Success;
       
+      -- use local var for gnat prove
+      Regs : array (Reg) of DataVal := (others => 0);
+      Memory : array (Addr) of DataVal := (others => 0);
+      PC : ProgramCounter := ProgramCounter'First;
+      
    begin
       PC := ProgramCounter'First;
       Result := True;
