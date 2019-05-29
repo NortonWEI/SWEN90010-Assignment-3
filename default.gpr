@@ -1,0 +1,11 @@
+project Default is
+
+   package Compiler is
+      for Switches ("ada") use ("-g", "-O2");
+   end Compiler;
+
+   for Source_Dirs use ("./**");
+   for Main use ("driver.adb");
+
+end Default;
+
