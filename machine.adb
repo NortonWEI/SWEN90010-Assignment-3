@@ -142,7 +142,6 @@ package body Machine with SPARK_Mode is
             when LDR =>
                if Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) > Long_Integer(Addr'Last) 
                  or Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) < Long_Integer(Addr'First) then
-                  Put_Line("5");
                   Ret := IllegalProgram;
                else
                   if Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) > Integer(DataVal'Last) 
@@ -219,9 +218,9 @@ package body Machine with SPARK_Mode is
          Ret := IllegalProgram;
       end if;
    end IncDetectionPC;
-     
-   function DynamicAnalyze(Prog : in Program;
-                           Cycles : in Integer) return Boolean is
+
+   function DetectInvalidBehaviour(Prog : in Program;
+                                   Cycles : in Integer) return Boolean is
       CycleCount : Integer := 0;
       Inst : Instr;
       Ret : ReturnCode := Success;
@@ -232,8 +231,8 @@ package body Machine with SPARK_Mode is
       Address : Addr;
       
       Result : Boolean := False;
-   begin
       
+   begin
       while (CycleCount < Cycles and Ret = Success) loop
          Inst := Prog(Counter);
          
@@ -242,7 +241,6 @@ package body Machine with SPARK_Mode is
                -- register value out of range
                if Long_Integer(Regs(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) > Long_Integer(DataVal'Last) 
                  or Long_Integer(Regs(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) < Long_Integer(DataVal'First) then
-                  Put_Line("");
                   Result := True;
                   Ret := IllegalProgram;
                   exit;
@@ -254,7 +252,6 @@ package body Machine with SPARK_Mode is
                -- register value out of range
                if Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) > Long_Integer(DataVal'Last) 
                  or Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) < Long_Integer(DataVal'First) then
-                  Put_Line("");
                   Result := True;
                   Ret := IllegalProgram;
                   exit;
@@ -266,7 +263,6 @@ package body Machine with SPARK_Mode is
                -- register value out of range
                if Long_Integer(Regs(Inst.MulRs1)) * Long_Integer(Regs(Inst.MulRs2)) > Long_Integer(DataVal'Last) 
                  or Long_Integer(Regs(Inst.MulRs1)) * Long_Integer(Regs(Inst.MulRs2)) < Long_Integer(DataVal'First) then
-                  Put_Line("");
                   Result := True;
                   Ret := IllegalProgram;
                   exit;
@@ -277,12 +273,10 @@ package body Machine with SPARK_Mode is
             when DIV =>               
                -- the divisor is 0
                if Integer(Regs(Inst.DivRs2)) = 0 then
-                  Put_Line("");
                   Result := True;
                   Ret := IllegalProgram;
                   exit;
                elsif (Integer(Regs(Inst.DivRs2)) = -1 and Integer(Regs(Inst.DivRs1)) = Integer(DataVal'First)) then
-                  Put_Line("");
                   Result := True;
                   Ret := IllegalProgram;
                   exit;
@@ -294,7 +288,6 @@ package body Machine with SPARK_Mode is
                -- memory address out of range
                if Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) > Long_Integer(Addr'Last) 
                  or Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) < Long_Integer(Addr'First) then
-                  Put_Line("");
                   Result := True;
                   Ret := IllegalProgram;
                   exit;
@@ -302,7 +295,6 @@ package body Machine with SPARK_Mode is
                   -- register value out of range
                   if Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) > Integer(DataVal'Last) 
                     or Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) < Integer(DataVal'First) then
-                     Put_Line("");
                      Result := True;
                      Ret := IllegalProgram;
                      exit;
@@ -317,7 +309,6 @@ package body Machine with SPARK_Mode is
                -- memory address out of range
                if Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) > Long_Integer(Addr'Last) 
                  or Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) < Long_Integer(Addr'First) then
-                  Put_Line("");
                   Result := True;
                   Ret := IllegalProgram;
                   exit;
@@ -331,7 +322,6 @@ package body Machine with SPARK_Mode is
                -- register value out of range
                if Integer(Inst.MovOffs) > Integer(DataVal'Last) 
                  or Integer(Inst.MovOffs) < Integer(DataVal'First) then
-                  Put_Line("");
                   Result := True;
                   Ret := IllegalProgram;
                   exit;
@@ -340,10 +330,9 @@ package body Machine with SPARK_Mode is
                   IncDetectionPC(Ret,1,Counter);
                end if;
             when Instruction.RET =>
-               --                 Ret := Success;
                Result := False;
                exit;
-            when JMP =>
+               when JMP =>
                if Integer(Inst.JmpOffs) + Integer(Counter) >= MAX_PROGRAM_LENGTH 
                  or Integer(Counter) + Integer(Inst.JmpOffs) <= 0 then
                   -- jump out of the program
@@ -381,23 +370,14 @@ package body Machine with SPARK_Mode is
          CycleCount := CycleCount + 1;
       end loop;
       
-      if Ret = Success and CycleCount = Cycles - 1 then
-         -- Cycles instructions executed without a RET or invalid behaviour
-         Result := True;
+      if Cycles > Integer'First then
+         if Ret = Success and CycleCount = Cycles - 1 then
+            -- Cycles instructions executed without a RET or invalid behaviour
+            Result := True;
+         end if;
       end if;
       
       return Result;
-   end DynamicAnalyze;
-
-   function DetectInvalidBehaviour(Prog : in Program;
-                                   Cycles : in Integer) return Boolean is
-      --StaticAnalysisRes : Boolean;
-      DynamicAnalysisRes : Boolean;
-      
-   begin
-      --StaticAnalysisRes := StaticAnalyze(Prog, Cycles);
-      DynamicAnalysisRes := DynamicAnalyze(Prog, Cycles);
-      return DynamicAnalysisRes;
    end DetectInvalidBehaviour;
    
 end Machine;
