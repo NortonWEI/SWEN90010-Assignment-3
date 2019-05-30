@@ -116,8 +116,14 @@ package body Machine with SPARK_Mode is
                DoMul(Inst.MulRd,Inst.MulRs1,Inst.MulRs2);
                IncPC(Ret,1);
             when DIV =>
-               DoDiv(Inst.DivRd,Inst.DivRs1,Inst.DivRs2);
-               IncPC(Ret,1);
+               if Integer(Regs(Inst.DivRs2)) = 0 then
+                  Ret := IllegalProgram;
+               elsif (Integer(Regs(Inst.DivRs2)) = -1 and Integer(Regs(Inst.DivRs1)) = Integer(DataVal'First)) then
+                  Ret := IllegalProgram;
+               else
+                  DoDiv(Inst.DivRd,Inst.DivRs1,Inst.DivRs2);
+                  IncPC(Ret,1);
+               end if;
             when LDR =>
                DoLdr(Inst.LdrRd,Inst.LdrRs,Inst.LdrOffs);
                IncPC(Ret,1);
@@ -212,7 +218,9 @@ package body Machine with SPARK_Mode is
                if Integer(Regs(Inst.DivRs2)) = 0 then
                   Put_Line("4");
                   return True;
-               else 
+               elsif (Integer(Regs(Inst.DivRs2)) = -1 and Integer(Regs(Inst.DivRs1)) = Integer(DataVal'First)) then
+                  return True;
+               else
                   Regs(Inst.DivRd) := Regs(Inst.DivRs1) / Regs(Inst.DivRs2);
                   IncDetectionPC(Ret,1,Counter);
                end if;
