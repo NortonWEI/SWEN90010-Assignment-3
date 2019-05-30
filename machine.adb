@@ -34,7 +34,7 @@ package body Machine with SPARK_Mode is
                    Rs2 : in Reg) is
    begin
       Regs(Rd) := Regs(Rs1) + Regs(Rs2);
---        Ret := Success;
+      --        Ret := Success;
    end DoAdd;
    
    procedure DoSub(Rd : in Reg; 
@@ -42,7 +42,7 @@ package body Machine with SPARK_Mode is
                    Rs2 : in Reg) is
    begin
       Regs(Rd) := Regs(Rs1) - Regs(Rs2);
---        Ret := Success;
+      --        Ret := Success;
    end DoSub;
    
    procedure DoMul(Rd : in Reg; 
@@ -50,7 +50,7 @@ package body Machine with SPARK_Mode is
                    Rs2 : in Reg) is
    begin
       Regs(Rd) := Regs(Rs1) * Regs(Rs2);
---        Ret := Success;
+      --        Ret := Success;
    end DoMul;
    
    procedure DoDiv(Rd : in Reg; 
@@ -58,7 +58,7 @@ package body Machine with SPARK_Mode is
                    Rs2 : in Reg) is
    begin
       Regs(Rd) := Regs(Rs1) / Regs(Rs2);
---        Ret := Success;
+      --        Ret := Success;
    end DoDiv;
    
    procedure DoLdr(Rd : in Reg; 
@@ -67,7 +67,7 @@ package body Machine with SPARK_Mode is
       A : Addr := Addr(Regs(Rs) + DataVal(Offs));
    begin
       Regs(Rd) := Memory(A);
---        Ret := Success;
+      --        Ret := Success;
    end DoLdr;
    
    procedure DoStr(Ra : in Reg;
@@ -76,14 +76,14 @@ package body Machine with SPARK_Mode is
       A : Addr := Addr(Regs(Ra) + DataVal(Offs));   
    begin
       Memory(A) := Regs(Rb);
---        Ret := Success;
+      --        Ret := Success;
    end DoStr;
    
    procedure DoMov(Rd : in Reg;
                    Offs : in Offset) is
    begin
       Regs(Rd) := DataVal(Offs);
---        Ret := Success;
+      --        Ret := Success;
    end DoMov;
    
    procedure ExecuteProgram(Prog : in Program;
@@ -107,14 +107,29 @@ package body Machine with SPARK_Mode is
          
          case Inst.Op is
             when ADD =>
-               DoAdd(Inst.AddRd,Inst.AddRs1,Inst.AddRs2);
-               IncPC(Ret,1);
+               if Long_Integer(Regs(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) > Long_Integer(DataVal'Last) 
+                 or Long_Integer(Regs(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) < Long_Integer(DataVal'First) then
+                  Ret := IllegalProgram;
+               else
+                  DoAdd(Inst.AddRd,Inst.AddRs1,Inst.AddRs2);
+                  IncPC(Ret,1);
+               end if;
             when SUB =>
-               DoSub(Inst.SubRd,Inst.SubRs1,Inst.SubRs2);
-               IncPC(Ret,1);
+               if Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) > Long_Integer(DataVal'Last) 
+                 or Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) < Long_Integer(DataVal'First) then
+                  Ret := IllegalProgram;
+               else
+                  DoSub(Inst.SubRd,Inst.SubRs1,Inst.SubRs2);
+                  IncPC(Ret,1);
+               end if;
             when MUL =>
-               DoMul(Inst.MulRd,Inst.MulRs1,Inst.MulRs2);
-               IncPC(Ret,1);
+               if Long_Integer(Regs(Inst.MulRs1)) * Long_Integer(Regs(Inst.MulRs2)) > Long_Integer(DataVal'Last) 
+                 or Long_Integer(Regs(Inst.MulRs1)) * Long_Integer(Regs(Inst.MulRs2)) < Long_Integer(DataVal'First) then
+                  Ret := IllegalProgram;   
+               else
+                  DoMul(Inst.MulRd,Inst.MulRs1,Inst.MulRs2);
+                  IncPC(Ret,1);
+               end if;
             when DIV =>
                if Integer(Regs(Inst.DivRs2)) = 0 then
                   Ret := IllegalProgram;
@@ -125,23 +140,62 @@ package body Machine with SPARK_Mode is
                   IncPC(Ret,1);
                end if;
             when LDR =>
-               DoLdr(Inst.LdrRd,Inst.LdrRs,Inst.LdrOffs);
-               IncPC(Ret,1);
+               if Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) > Long_Integer(Addr'Last) 
+                 or Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) < Long_Integer(Addr'First) then
+                  Put_Line("5");
+                  Ret := IllegalProgram;
+               else
+                  if Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) > Integer(DataVal'Last) 
+                    or Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) < Integer(DataVal'First) then
+                     Ret := IllegalProgram;
+                  else
+                     DoLdr(Inst.LdrRd,Inst.LdrRs,Inst.LdrOffs);
+                     IncPC(Ret,1);
+                  end if;
+               end if;
             when STR =>
-               DoStr(Inst.StrRa,Inst.StrOffs,Inst.StrRb);
-               IncPC(Ret,1);
+               if Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) > Long_Integer(Addr'Last) 
+                 or Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) < Long_Integer(Addr'First) then
+                  Ret := IllegalProgram;
+               else
+                  DoStr(Inst.StrRa,Inst.StrOffs,Inst.StrRb);
+                  IncPC(Ret,1);
+               end if;
             when MOV =>
-               DoMov(Inst.MovRd,Inst.MovOffs);
-               IncPC(Ret,1);
+               if Integer(Inst.MovOffs) > Integer(DataVal'Last) 
+                 or Integer(Inst.MovOffs) < Integer(DataVal'First) then
+                  Ret := IllegalProgram;
+               else
+                  DoMov(Inst.MovRd,Inst.MovOffs);
+                  IncPC(Ret,1);
+               end if;
             when Instruction.RET =>
                Result := Integer(Regs(Inst.RetRs));
                Ret := Success;
                return;
             when JMP =>
-               IncPC(Ret,Inst.JmpOffs);
+               if Integer(Inst.JmpOffs) + Integer(PC) >= MAX_PROGRAM_LENGTH 
+                 or Integer(PC) + Integer(Inst.JmpOffs) <= 0 then
+                  -- jump out of the program
+                  Ret := IllegalProgram;
+               elsif Integer(Inst.JmpOffs) = 0 then
+                  -- infinite loop
+                  Ret := CyclesExhausted;
+               else
+                  IncPC(Ret,Inst.JmpOffs);
+               end if;
             when JZ =>
                if Regs(Inst.JzRa) = 0 then
-                  IncPC(Ret,Inst.JzOffs);
+                  if Integer(Inst.JzOffs) + Integer(PC) >= MAX_PROGRAM_LENGTH 
+                    or Integer(PC) + Integer(Inst.JzOffs) <= 0 then
+                     -- jump out of the program
+                     Ret := IllegalProgram;
+                  elsif Integer(Inst.JzOffs) = 0 then
+                     -- infinite loop
+                     Ret := CyclesExhausted;
+                  else
+                     IncPC(Ret,Inst.JzOffs);
+                  end if;
                else
                   IncPc(Ret,1);
                end if;
@@ -185,8 +239,8 @@ package body Machine with SPARK_Mode is
          case Inst.Op is
             when ADD =>
                -- register value out of range
-               if Integer(Regs(Inst.AddRs1) + Regs(Inst.AddRs2)) > Integer(DataVal'Last) 
-                 or Integer(Regs(Inst.AddRs1) + Regs(Inst.AddRs2)) < Integer(DataVal'First) then
+               if Long_Integer(Regs(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) > Long_Integer(DataVal'Last) 
+                 or Long_Integer(Regs(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) < Long_Integer(DataVal'First) then
                   Put_Line("1");
                   return True;
                else 
@@ -195,8 +249,8 @@ package body Machine with SPARK_Mode is
                end if;
             when SUB =>               
                -- register value out of range
-               if Integer(Regs(Inst.SubRs1) - Regs(Inst.SubRs2)) > Integer(DataVal'Last) 
-                 or Integer(Regs(Inst.SubRs1) - Regs(Inst.SubRs2)) < Integer(DataVal'First) then
+               if Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) > Long_Integer(DataVal'Last) 
+                 or Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) < Long_Integer(DataVal'First) then
                   Put_Line("2");
                   return True;
                else
@@ -205,8 +259,8 @@ package body Machine with SPARK_Mode is
                end if;
             when MUL =>               
                -- register value out of range
-               if Integer(Regs(Inst.MulRs1) * Regs(Inst.MulRs2)) > Integer(DataVal'Last) 
-                 or Integer(Regs(Inst.MulRs1) * Regs(Inst.MulRs2)) < Integer(DataVal'First) then
+               if Long_Integer(Regs(Inst.MulRs1)) * Long_Integer(Regs(Inst.MulRs2)) > Long_Integer(DataVal'Last) 
+                 or Long_Integer(Regs(Inst.MulRs1)) * Long_Integer(Regs(Inst.MulRs2)) < Long_Integer(DataVal'First) then
                   Put_Line("3");
                   return True;
                else
@@ -226,8 +280,8 @@ package body Machine with SPARK_Mode is
                end if;
             when LDR =>               
                -- memory address out of range
-               if Integer(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)) > Integer(Addr'Last) 
-                 or Integer(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)) < Integer(Addr'First) then
+               if Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) > Long_Integer(Addr'Last) 
+                 or Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) < Long_Integer(Addr'First) then
                   Put_Line("5");
                   return True;
                else
@@ -245,8 +299,8 @@ package body Machine with SPARK_Mode is
                end if;
             when STR =>
                -- memory address out of range
-               if Integer(Regs(Inst.StrRa) + DataVal(Inst.StrOffs)) > Integer(Addr'Last) 
-                 or Integer(Regs(Inst.StrRa) + DataVal(Inst.StrOffs)) < Integer(Addr'First) then
+               if Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) > Long_Integer(Addr'Last) 
+                 or Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) < Long_Integer(Addr'First) then
                   Put_Line("7");
                   return True;
                else
