@@ -2,8 +2,6 @@ with Instruction;
 use Instruction;
 with Debug; use Debug;
 
-with Ada.Text_IO;
-
 -- used so we can print TAB character
 with Ada.Characters.Latin_1;
 
@@ -23,8 +21,12 @@ package body Machine with SPARK_Mode is
       
    procedure IncPC(Ret : out ReturnCode; Offs : in Offset) is
    begin
-      PC := ProgramCounter(Integer(PC) + Integer(Offs));
-      Ret := Success;
+      if Integer(PC) + Integer(Offs) <= MAX_PROGRAM_LENGTH and Integer(PC) + Integer(Offs) > 0 then
+         PC := ProgramCounter(Integer(PC) + Integer(Offs));
+         Ret := Success;
+      else
+         Ret := IllegalProgram;
+      end if;
    end IncPC;
    
    procedure DoAdd(Rd : in Reg; 
@@ -32,8 +34,30 @@ package body Machine with SPARK_Mode is
                    Rs2 : in Reg;
                    Ret : out ReturnCode) is
    begin
-      Regs(Rd) := Regs(Rs1) + Regs(Rs2);
-      Ret := Success;
+      if Integer(Regs(Rs1) + Regs(Rs2)) <= Integer(DataVal'Last) and
+        Integer(Regs(Rs1) + Regs(Rs2)) >= Integer(DataVal'First) then
+         --  if Regs(Rs1) > -2**30 and Regs(Rs1) < 2**30 and Regs(Rs2) > -2**30 and Regs(Rs2) < 2**30 then
+         --           if Integer(Regs(Rs1)) >= Integer(DataVal'First) and Integer(Regs(Rs1)) <= Integer(DataVal'First)/2 then
+         --              if Integer(Regs(Rs2)) <= Integer(DataVal'First)/2 then
+         Regs(Rd) := Regs(Rs1) + Regs(Rs2);
+         Ret := Success;
+      else
+         Ret := IllegalProgram;
+      end if;
+      --           elsif Integer(Regs(Rs2)) >= Integer(DataVal'First) and Integer(Regs(Rs2)) <= Integer(DataVal'First)/2 then
+      --              if Integer(Regs(Rs1)) <= Integer(DataVal'First)/2 then
+      --                 Regs(Rd) := Regs(Rs1) + Regs(Rs2);
+      --                 Ret := Success;
+      --              else
+      --                 Ret := IllegalProgram;
+      --              end if;
+      --        else
+      --           Ret := IllegalProgram;
+      --           end if;
+      --        else
+      --           Ret := IllegalProgram;
+      --  --        end if;
+      
    end DoAdd;
    
    procedure DoSub(Rd : in Reg; 
@@ -201,127 +225,127 @@ package body Machine with SPARK_Mode is
       return False;
    end StaticAnalyze;
    
-   function DynamicAnalyze(Prog : in Program;
-                           Cycles : in Integer) return Boolean is
-      CycleCount : Integer := 0;
-      Inst : Instr;
-      Ret : ReturnCode := Success;
-      
-   begin
-      PC := ProgramCounter'First;
-      
-      while (CycleCount < Cycles and Ret = Success) loop
-         Inst := Prog(PC);
-         
-         case Inst.Op is
-            when ADD =>
-               DoAdd(Inst.AddRd,Inst.AddRs1,Inst.AddRs2,Ret);
-               IncPC(Ret,1);
-               
-               -- register value out of range
-               if Regs(Inst.AddRs1) + Regs(Inst.AddRs2) > DataVal'Last 
-                 or Regs(Inst.AddRs1) + Regs(Inst.AddRs2) < DataVal'First then
-                  return True;
-               end if;
-            when SUB =>
-               DoSub(Inst.SubRd,Inst.SubRs1,Inst.SubRs2,Ret);
-               IncPC(Ret,1);
-               
-               -- register value out of range
-               if Regs(Inst.AddRs1) - Regs(Inst.AddRs2) > DataVal'Last 
-                 or Regs(Inst.AddRs1) - Regs(Inst.AddRs2) < DataVal'First then
-                  return True;
-               end if;
-            when MUL =>
-               DoMul(Inst.MulRd,Inst.MulRs1,Inst.MulRs2,Ret);
-               IncPC(Ret,1);
-               
-               -- register value out of range
-               if Regs(Inst.AddRs1) * Regs(Inst.AddRs2) > DataVal'Last 
-                 or Regs(Inst.AddRs1) * Regs(Inst.AddRs2) < DataVal'First then
-                  return True;
-               end if;
-            when DIV =>
-               DoDiv(Inst.DivRd,Inst.DivRs1,Inst.DivRs2,Ret);
-               IncPC(Ret,1);
-               
-               -- the divisor is 0
-               if Regs(Inst.DivRs2) = 0 then
-                  return True;
-               end if;
-            when LDR =>
-               DoLdr(Inst.LdrRd,Inst.LdrRs,Inst.LdrOffs,Ret);
-               IncPC(Ret,1);
-               
-               -- memory address out of range
-               if Integer(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)) > Integer(Addr'Last) 
-                 or Integer(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)) < Integer(Addr'First) then
-                  return True;
-               else
-                  -- register value out of range
-                  if Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) > Integer(DataVal'Last) 
-                    or Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) < Integer(DataVal'First) then
-                     return True;
-                  end if;
-               end if;
-            when STR =>
-               DoStr(Inst.StrRa,Inst.StrOffs,Inst.StrRb,Ret);
-               IncPC(Ret,1);
-               
-               -- memory address out of range
-               if Integer(Regs(Inst.StrRa) + DataVal(Inst.StrOffs)) > Integer(Addr'Last) 
-                 or Integer(Regs(Inst.StrRa) + DataVal(Inst.StrOffs)) < Integer(Addr'First) then
-                  return True;
-               end if;
-            when MOV =>
-               DoMov(Inst.MovRd,Inst.MovOffs,Ret);
-               IncPC(Ret,1);
-               
-               -- register value out of range
-               if Integer(Inst.MovOffs) > Integer(DataVal'Last) 
-                 or Integer(Inst.MovOffs) < Integer(DataVal'First) then
-                  return True;
-               end if;
-            when Instruction.RET =>
-               Ret := Success;
-            when JMP =>
-               IncPC(Ret,Inst.JmpOffs);
-               
-               if Integer(Inst.JmpOffs) + Integer(PC) >= MAX_PROGRAM_LENGTH 
-                 or Integer(PC) + Integer(Inst.JmpOffs) <= 0 then
-                  -- jump out of the program
-                  return True;
-               elsif Integer(Inst.JmpOffs) = 0 then
-                  -- infinite loop
-                  return False;
-               end if;
-            when JZ =>
-               if Regs(Inst.JzRa) = 0 then
-                  IncPC(Ret,Inst.JzOffs);
-                  
-                  if Integer(Inst.JzOffs) + Integer(PC) >= MAX_PROGRAM_LENGTH 
-                    or Integer(PC) + Integer(Inst.JzOffs) <= 0 then
-                     -- jump out of the program
-                     return True;
-                  elsif Integer(Inst.JzOffs) = 0 then
-                     -- infinite loop
-                     return False;
-                  end if;
-               else
-                  IncPc(Ret,1);
-               end if;
-            when NOP =>
-               IncPC(Ret,1);
-         end case;
-         CycleCount := CycleCount + 1;
-      end loop;
-      if Ret = Success then
-         -- Cycles instructions executed without a RET or invalid behaviour
-         Ret := CyclesExhausted;
-      end if;
-      
-      return False;
-   end DynamicAnalyze;
+--     function DynamicAnalyze(Prog : in Program;
+--                             Cycles : in Integer) return Boolean is
+--        CycleCount : Integer := 0;
+--        Inst : Instr;
+--        Ret : ReturnCode := Success;
+--        
+--     begin
+--        PC := ProgramCounter'First;
+--        
+--        while (CycleCount < Cycles and Ret = Success) loop
+--           Inst := Prog(PC);
+--           
+--           case Inst.Op is
+--              when ADD =>
+--                 DoAdd(Inst.AddRd,Inst.AddRs1,Inst.AddRs2,Ret);
+--                 IncPC(Ret,1);
+--                 
+--                 -- register value out of range
+--                 if Integer(Regs(Inst.AddRs1) + Regs(Inst.AddRs2)) > Integer(DataVal'Last) 
+--                   or Integer(Regs(Inst.AddRs1) + Regs(Inst.AddRs2)) < Integer(DataVal'First) then
+--                    return True;
+--                 end if;
+--              when SUB =>
+--                 DoSub(Inst.SubRd,Inst.SubRs1,Inst.SubRs2,Ret);
+--                 IncPC(Ret,1);
+--                 
+--                 -- register value out of range
+--                 if Integer(Regs(Inst.AddRs1) - Regs(Inst.AddRs2)) > Integer(DataVal'Last) 
+--                   or Integer(Regs(Inst.AddRs1) - Regs(Inst.AddRs2)) < Integer(DataVal'First) then
+--                    return True;
+--                 end if;
+--              when MUL =>
+--                 DoMul(Inst.MulRd,Inst.MulRs1,Inst.MulRs2,Ret);
+--                 IncPC(Ret,1);
+--                 
+--                 -- register value out of range
+--                 if Integer(Regs(Inst.AddRs1) * Regs(Inst.AddRs2)) > Integer(DataVal'Last) 
+--                   or Integer(Regs(Inst.AddRs1) * Regs(Inst.AddRs2)) < Integer(DataVal'First) then
+--                    return True;
+--                 end if;
+--              when DIV =>
+--                 DoDiv(Inst.DivRd,Inst.DivRs1,Inst.DivRs2,Ret);
+--                 IncPC(Ret,1);
+--                 
+--                 -- the divisor is 0
+--                 if Integer(Regs(Inst.DivRs2)) = 0 then
+--                    return True;
+--                 end if;
+--              when LDR =>
+--                 DoLdr(Inst.LdrRd,Inst.LdrRs,Inst.LdrOffs,Ret);
+--                 IncPC(Ret,1);
+--                 
+--                 -- memory address out of range
+--                 if Integer(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)) > Integer(Addr'Last) 
+--                   or Integer(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)) < Integer(Addr'First) then
+--                    return True;
+--                 else
+--                    -- register value out of range
+--                    if Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) > Integer(DataVal'Last) 
+--                      or Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) < Integer(DataVal'First) then
+--                       return True;
+--                    end if;
+--                 end if;
+--              when STR =>
+--                 DoStr(Inst.StrRa,Inst.StrOffs,Inst.StrRb,Ret);
+--                 IncPC(Ret,1);
+--                 
+--                 -- memory address out of range
+--                 if Integer(Regs(Inst.StrRa) + DataVal(Inst.StrOffs)) > Integer(Addr'Last) 
+--                   or Integer(Regs(Inst.StrRa) + DataVal(Inst.StrOffs)) < Integer(Addr'First) then
+--                    return True;
+--                 end if;
+--              when MOV =>
+--                 DoMov(Inst.MovRd,Inst.MovOffs,Ret);
+--                 IncPC(Ret,1);
+--                 
+--                 -- register value out of range
+--                 if Integer(Inst.MovOffs) > Integer(DataVal'Last) 
+--                   or Integer(Inst.MovOffs) < Integer(DataVal'First) then
+--                    return True;
+--                 end if;
+--              when Instruction.RET =>
+--                 Ret := Success;
+--              when JMP =>
+--                 IncPC(Ret,Inst.JmpOffs);
+--                 
+--                 if Integer(Inst.JmpOffs) + Integer(PC) >= MAX_PROGRAM_LENGTH 
+--                   or Integer(PC) + Integer(Inst.JmpOffs) <= 0 then
+--                    -- jump out of the program
+--                    return True;
+--                 elsif Integer(Inst.JmpOffs) = 0 then
+--                    -- infinite loop
+--                    return False;
+--                 end if;
+--              when JZ =>
+--                 if Regs(Inst.JzRa) = 0 then
+--                    IncPC(Ret,Inst.JzOffs);
+--                    
+--                    if Integer(Inst.JzOffs) + Integer(PC) >= MAX_PROGRAM_LENGTH 
+--                      or Integer(PC) + Integer(Inst.JzOffs) <= 0 then
+--                       -- jump out of the program
+--                       return True;
+--                    elsif Integer(Inst.JzOffs) = 0 then
+--                       -- infinite loop
+--                       return False;
+--                    end if;
+--                 else
+--                    IncPc(Ret,1);
+--                 end if;
+--              when NOP =>
+--                 IncPC(Ret,1);
+--           end case;
+--           CycleCount := CycleCount + 1;
+--        end loop;
+--        if Ret = Success then
+--           -- Cycles instructions executed without a RET or invalid behaviour
+--           Ret := CyclesExhausted;
+--        end if;
+--        
+--        return False;
+--     end DynamicAnalyze;
 
    function DetectInvalidBehaviour(Prog : in Program;
                                    Cycles : in Integer) return Boolean is
@@ -330,7 +354,7 @@ package body Machine with SPARK_Mode is
       
    begin
       StaticAnalysisRes := StaticAnalyze(Prog, Cycles);
-      DynamicAnalysisRes := DynamicAnalyze(Prog, Cycles);
+      -- DynamicAnalysisRes := DynamicAnalyze(Prog, Cycles);
       return StaticAnalysisRes and DynamicAnalysisRes;
    end DetectInvalidBehaviour;
    
