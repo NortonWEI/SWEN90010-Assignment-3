@@ -31,66 +31,59 @@ package body Machine with SPARK_Mode is
    
    procedure DoAdd(Rd : in Reg; 
                    Rs1 : in Reg; 
-                   Rs2 : in Reg;
-                   Ret : out ReturnCode) is
+                   Rs2 : in Reg) is
    begin
       Regs(Rd) := Regs(Rs1) + Regs(Rs2);
-      Ret := Success;
+--        Ret := Success;
    end DoAdd;
    
    procedure DoSub(Rd : in Reg; 
                    Rs1 : in Reg; 
-                   Rs2 : in Reg;
-                   Ret : out ReturnCode) is
+                   Rs2 : in Reg) is
    begin
       Regs(Rd) := Regs(Rs1) - Regs(Rs2);
-      Ret := Success;
+--        Ret := Success;
    end DoSub;
    
    procedure DoMul(Rd : in Reg; 
                    Rs1 : in Reg; 
-                   Rs2 : in Reg;
-                   Ret : out ReturnCode) is
+                   Rs2 : in Reg) is
    begin
       Regs(Rd) := Regs(Rs1) * Regs(Rs2);
-      Ret := Success;
+--        Ret := Success;
    end DoMul;
    
    procedure DoDiv(Rd : in Reg; 
                    Rs1 : in Reg; 
-                   Rs2 : in Reg;
-                   Ret : out ReturnCode) is
+                   Rs2 : in Reg) is
    begin
       Regs(Rd) := Regs(Rs1) / Regs(Rs2);
-      Ret := Success;
+--        Ret := Success;
    end DoDiv;
    
    procedure DoLdr(Rd : in Reg; 
                    Rs : in Reg; 
-                   Offs : in Offset;
-                   Ret : out ReturnCode) is
+                   Offs : in Offset) is
       A : Addr := Addr(Regs(Rs) + DataVal(Offs));
    begin
       Regs(Rd) := Memory(A);
-      Ret := Success;
+--        Ret := Success;
    end DoLdr;
    
    procedure DoStr(Ra : in Reg;
                    Offs : in Offset;
-                   Rb : in Reg;
-                   Ret : out ReturnCode) is
+                   Rb : in Reg) is
       A : Addr := Addr(Regs(Ra) + DataVal(Offs));   
    begin
       Memory(A) := Regs(Rb);
-      Ret := Success;
+--        Ret := Success;
    end DoStr;
    
    procedure DoMov(Rd : in Reg;
-                   Offs : in Offset;
-                   Ret : out ReturnCode) is
+                   Offs : in Offset) is
    begin
       Regs(Rd) := DataVal(Offs);
-      Ret := Success;
+--        Ret := Success;
    end DoMov;
    
    procedure ExecuteProgram(Prog : in Program;
@@ -114,25 +107,25 @@ package body Machine with SPARK_Mode is
          
          case Inst.Op is
             when ADD =>
-               DoAdd(Inst.AddRd,Inst.AddRs1,Inst.AddRs2,Ret);
+               DoAdd(Inst.AddRd,Inst.AddRs1,Inst.AddRs2);
                IncPC(Ret,1);
             when SUB =>
-               DoSub(Inst.SubRd,Inst.SubRs1,Inst.SubRs2,Ret);
+               DoSub(Inst.SubRd,Inst.SubRs1,Inst.SubRs2);
                IncPC(Ret,1);
             when MUL =>
-               DoMul(Inst.MulRd,Inst.MulRs1,Inst.MulRs2,Ret);
+               DoMul(Inst.MulRd,Inst.MulRs1,Inst.MulRs2);
                IncPC(Ret,1);
             when DIV =>
-               DoDiv(Inst.DivRd,Inst.DivRs1,Inst.DivRs2,Ret);
+               DoDiv(Inst.DivRd,Inst.DivRs1,Inst.DivRs2);
                IncPC(Ret,1);
             when LDR =>
-               DoLdr(Inst.LdrRd,Inst.LdrRs,Inst.LdrOffs,Ret);
+               DoLdr(Inst.LdrRd,Inst.LdrRs,Inst.LdrOffs);
                IncPC(Ret,1);
             when STR =>
-               DoStr(Inst.StrRa,Inst.StrOffs,Inst.StrRb,Ret);
+               DoStr(Inst.StrRa,Inst.StrOffs,Inst.StrRb);
                IncPC(Ret,1);
             when MOV =>
-               DoMov(Inst.MovRd,Inst.MovOffs,Ret);
+               DoMov(Inst.MovRd,Inst.MovOffs);
                IncPC(Ret,1);
             when Instruction.RET =>
                Result := Integer(Regs(Inst.RetRs));
