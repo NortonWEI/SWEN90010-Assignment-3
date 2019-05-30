@@ -34,30 +34,8 @@ package body Machine with SPARK_Mode is
                    Rs2 : in Reg;
                    Ret : out ReturnCode) is
    begin
---        if Integer(Regs(Rs1) + Regs(Rs2)) <= Integer(DataVal'Last) and
---          Integer(Regs(Rs1) + Regs(Rs2)) >= Integer(DataVal'First) then
-         --  if Regs(Rs1) > -2**30 and Regs(Rs1) < 2**30 and Regs(Rs2) > -2**30 and Regs(Rs2) < 2**30 then
-         --           if Integer(Regs(Rs1)) >= Integer(DataVal'First) and Integer(Regs(Rs1)) <= Integer(DataVal'First)/2 then
-         --              if Integer(Regs(Rs2)) <= Integer(DataVal'First)/2 then
-         Regs(Rd) := Regs(Rs1) + Regs(Rs2);
-         Ret := Success;
---        else
---           Ret := IllegalProgram;
---        end if;
-      --           elsif Integer(Regs(Rs2)) >= Integer(DataVal'First) and Integer(Regs(Rs2)) <= Integer(DataVal'First)/2 then
-      --              if Integer(Regs(Rs1)) <= Integer(DataVal'First)/2 then
-      --                 Regs(Rd) := Regs(Rs1) + Regs(Rs2);
-      --                 Ret := Success;
-      --              else
-      --                 Ret := IllegalProgram;
-      --              end if;
-      --        else
-      --           Ret := IllegalProgram;
-      --           end if;
-      --        else
-      --           Ret := IllegalProgram;
-      --  --        end if;
-      
+      Regs(Rd) := Regs(Rs1) + Regs(Rs2);
+      Ret := Success;
    end DoAdd;
    
    procedure DoSub(Rd : in Reg; 
@@ -181,60 +159,13 @@ package body Machine with SPARK_Mode is
    
    procedure IncDetectionPC(Ret : out ReturnCode; Offs : in Offset; Counter: in out ProgramCounter) is
    begin
-      if Integer(PC) + Integer(Offs) <= MAX_PROGRAM_LENGTH and Integer(PC) + Integer(Offs) > 0 then
-         Counter := ProgramCounter(Integer(PC) + Integer(Offs));
+      if Integer(Counter) + Integer(Offs) <= MAX_PROGRAM_LENGTH and Integer(Counter) + Integer(Offs) > 0 then
+         Counter := ProgramCounter(Integer(Counter) + Integer(Offs));
          Ret := Success;
       else
          Ret := IllegalProgram;
       end if;
    end IncDetectionPC;
-   
---     function StaticAnalyze(Prog : in Program;
---                             Cycles : in Integer) return Boolean is
---        CycleCount : Integer := 0;
---        Inst : Instr;
---        RetExist : Boolean := False;
---        
---     begin
---        
---        while (CycleCount < Cycles) loop
---           -- just check the program line by line
---           Inst := Prog(ProgramCounter(CycleCount + 1));
---  
---           case Inst.Op is
---  --              when JMP =>
---  --                 if Integer(Inst.JmpOffs) + CycleCount + 1 >= MAX_PROGRAM_LENGTH 
---  --                   or CycleCount + Integer(Inst.JmpOffs) < 0 then
---  --                    -- jump out of the program
---  --                    return True;
---  --                 elsif Integer(Inst.JmpOffs) = 0 then
---  --                    -- infinite loop
---  --                    return False;
---  --                 end if;
---  --              when JZ =>
---  --                 if Integer(Inst.JzOffs) + CycleCount + 1 >= MAX_PROGRAM_LENGTH 
---  --                   or CycleCount + Integer(Inst.JzOffs) < 0 then
---  --                    -- jump out of the program
---  --                    return True;
---  --                 elsif Integer(Inst.JzOffs) = 0 then
---  --                    -- infinite loop
---  --                    return False;
---  --                 end if;
---              when Instruction.RET =>
---                 RetExist := True;
---              when others =>
---                 null;
---           end case;
---           CycleCount := CycleCount + 1;
---        end loop;
---        
---        if not RetExist then
---           -- no RET in the program
---           return True;
---        end if;
---        
---        return False;
---     end StaticAnalyze;
      
    function DynamicAnalyze(Prog : in Program;
                            Cycles : in Integer) return Boolean is
@@ -257,6 +188,7 @@ package body Machine with SPARK_Mode is
                -- register value out of range
                if Integer(Regs(Inst.AddRs1) + Regs(Inst.AddRs2)) > Integer(DataVal'Last) 
                  or Integer(Regs(Inst.AddRs1) + Regs(Inst.AddRs2)) < Integer(DataVal'First) then
+                  Put_Line("1");
                   return True;
                else 
                   Regs(Inst.AddRd) := Regs(Inst.AddRs1) + Regs(Inst.AddRs2);
@@ -264,8 +196,9 @@ package body Machine with SPARK_Mode is
                end if;
             when SUB =>               
                -- register value out of range
-               if Integer(Regs(Inst.AddRs1) - Regs(Inst.AddRs2)) > Integer(DataVal'Last) 
-                 or Integer(Regs(Inst.AddRs1) - Regs(Inst.AddRs2)) < Integer(DataVal'First) then
+               if Integer(Regs(Inst.SubRs1) - Regs(Inst.SubRs2)) > Integer(DataVal'Last) 
+                 or Integer(Regs(Inst.SubRs1) - Regs(Inst.SubRs2)) < Integer(DataVal'First) then
+                  Put_Line("2");
                   return True;
                else
                   Regs(Inst.SubRd) := Regs(Inst.SubRs1) - Regs(Inst.SubRs2);
@@ -273,8 +206,9 @@ package body Machine with SPARK_Mode is
                end if;
             when MUL =>               
                -- register value out of range
-               if Integer(Regs(Inst.AddRs1) * Regs(Inst.AddRs2)) > Integer(DataVal'Last) 
-                 or Integer(Regs(Inst.AddRs1) * Regs(Inst.AddRs2)) < Integer(DataVal'First) then
+               if Integer(Regs(Inst.MulRs1) * Regs(Inst.MulRs2)) > Integer(DataVal'Last) 
+                 or Integer(Regs(Inst.MulRs1) * Regs(Inst.MulRs2)) < Integer(DataVal'First) then
+                  Put_Line("3");
                   return True;
                else
                   Regs(Inst.MulRd) := Regs(Inst.MulRs1) * Regs(Inst.MulRs2);
@@ -283,6 +217,7 @@ package body Machine with SPARK_Mode is
             when DIV =>               
                -- the divisor is 0
                if Integer(Regs(Inst.DivRs2)) = 0 then
+                  Put_Line("4");
                   return True;
                else 
                   Regs(Inst.DivRd) := Regs(Inst.DivRs1) / Regs(Inst.DivRs2);
@@ -292,11 +227,13 @@ package body Machine with SPARK_Mode is
                -- memory address out of range
                if Integer(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)) > Integer(Addr'Last) 
                  or Integer(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)) < Integer(Addr'First) then
+                  Put_Line("5");
                   return True;
                else
                   -- register value out of range
                   if Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) > Integer(DataVal'Last) 
                     or Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) < Integer(DataVal'First) then
+                     Put_Line("6");
                      return True;
                   else
                      Address := Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs));
@@ -309,6 +246,7 @@ package body Machine with SPARK_Mode is
                -- memory address out of range
                if Integer(Regs(Inst.StrRa) + DataVal(Inst.StrOffs)) > Integer(Addr'Last) 
                  or Integer(Regs(Inst.StrRa) + DataVal(Inst.StrOffs)) < Integer(Addr'First) then
+                  Put_Line("7");
                   return True;
                else
                   Address := Addr(Regs(Inst.StrRa) + DataVal(Inst.StrOffs));
@@ -320,6 +258,7 @@ package body Machine with SPARK_Mode is
                -- register value out of range
                if Integer(Inst.MovOffs) > Integer(DataVal'Last) 
                  or Integer(Inst.MovOffs) < Integer(DataVal'First) then
+                  Put_Line("8");
                   return True;
                else
                   Regs(Inst.MovRd) := DataVal(Inst.MovOffs);
@@ -329,9 +268,10 @@ package body Machine with SPARK_Mode is
                --                 Ret := Success;
                return False;
             when JMP =>
-               if Integer(Inst.JmpOffs) + Integer(PC) >= MAX_PROGRAM_LENGTH 
-                 or Integer(PC) + Integer(Inst.JmpOffs) <= 0 then
+               if Integer(Inst.JmpOffs) + Integer(Counter) >= MAX_PROGRAM_LENGTH 
+                 or Integer(Counter) + Integer(Inst.JmpOffs) <= 0 then
                   -- jump out of the program
+                  Put_Line("9");
                   return True;
                elsif Integer(Inst.JmpOffs) = 0 then
                   -- infinite loop
@@ -341,9 +281,10 @@ package body Machine with SPARK_Mode is
                end if;
             when JZ =>
                if Regs(Inst.JzRa) = 0 then
-                  if Integer(Inst.JzOffs) + Integer(PC) >= MAX_PROGRAM_LENGTH 
-                    or Integer(PC) + Integer(Inst.JzOffs) <= 0 then
+                  if Integer(Inst.JzOffs) + Integer(Counter) >= MAX_PROGRAM_LENGTH 
+                    or Integer(Counter) + Integer(Inst.JzOffs) <= 0 then
                      -- jump out of the program
+                     Put_Line("10");
                      return True;
                   elsif Integer(Inst.JzOffs) = 0 then
                      -- infinite loop
@@ -362,7 +303,7 @@ package body Machine with SPARK_Mode is
       
       if Ret = Success then
          -- Cycles instructions executed without a RET or invalid behaviour
-         Ret := CyclesExhausted;
+         Put_Line("11");
          return True;
       end if;
       
