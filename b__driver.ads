@@ -285,7 +285,7 @@ package ada_main is
    pragma Export (C, u00123, "system__os_primitivesB");
    u00124 : constant Version_32 := 16#0fa60a0d#;
    pragma Export (C, u00124, "system__os_primitivesS");
-   u00125 : constant Version_32 := 16#e5d33364#;
+   u00125 : constant Version_32 := 16#d6e1520b#;
    pragma Export (C, u00125, "machineB");
    u00126 : constant Version_32 := 16#8ffc8149#;
    pragma Export (C, u00126, "machineS");
