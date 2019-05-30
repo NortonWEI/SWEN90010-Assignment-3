@@ -218,9 +218,42 @@ package body Machine with SPARK_Mode is
          Ret := IllegalProgram;
       end if;
    end IncDetectionPC;
+   
+   function StaticAnalyze(Prog : in Program;
+                          Cycles : in Integer) return Boolean is
+      CycleCount : Integer := 0;
+      Inst : Instr;
+      RetExist : Boolean := False;
+      
+      Result : Boolean := False;
+   begin
+      
+      while (CycleCount < Cycles) loop
+         -- just check the program line by line
+         if CycleCount < MAX_PROGRAM_LENGTH and CycleCount >= 0 then
+            Inst := Prog(ProgramCounter(CycleCount + 1));
 
-   function DetectInvalidBehaviour(Prog : in Program;
-                                   Cycles : in Integer) return Boolean is
+            case Inst.Op is
+            when Instruction.RET =>
+               RetExist := True;
+            when others =>
+               null;
+            end case;
+            CycleCount := CycleCount + 1;
+         end if;
+      end loop;
+      
+      if not RetExist then
+         -- no RET in the program
+         Result := True;
+      end if;
+      
+      return Result;
+   end StaticAnalyze;
+
+   
+   function DynamicAnalyze(Prog : in Program;
+                           Cycles : in Integer) return Boolean is
       CycleCount : Integer := 0;
       Inst : Instr;
       Ret : ReturnCode := Success;
@@ -378,6 +411,25 @@ package body Machine with SPARK_Mode is
       end if;
       
       return Result;
+   end DynamicAnalyze;
+
+   function DetectInvalidBehaviour(Prog : in Program;
+                                   Cycles : in Integer) return Boolean is
+      StaticAnalyRes : Boolean;
+      DynamicAnalyRes : Boolean;
+      
+      FinalRes : Boolean;
+   begin
+      StaticAnalyRes := StaticAnalyze(Prog, Cycles);
+      
+      if StaticAnalyRes then
+         FinalRes := True;
+      else
+         DynamicAnalyRes := DynamicAnalyze(Prog, Cycles);
+         FinalRes := DynamicAnalyRes;
+      end if;
+         
+      return FinalRes;
    end DetectInvalidBehaviour;
    
 end Machine;
