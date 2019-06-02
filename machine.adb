@@ -258,7 +258,7 @@ package body Machine with SPARK_Mode is
       New_Line;
    end LogWarning;
    
-   procedure MinMax(Left1Left2: in Long_Long_Integer; 
+   procedure RegMinMax(Left1Left2: in Long_Long_Integer; 
                     Left1Right2: in Long_Long_Integer; 
                     Right1Left2: in Long_Long_Integer; 
                     Right1Right2: in Long_Long_Integer; 
@@ -319,7 +319,42 @@ package body Machine with SPARK_Mode is
          Code := 1;
       end if;
    
-   end MinMax;
+   end RegMinMax;
+   
+   procedure AddrValidation(LeftVal: in Long_Long_Integer; 
+                            RightVal: in Long_Long_Integer; 
+                            Code: out Integer) is
+      LongMin : Long_Long_Integer := LeftVal;
+      LongMax : Long_Long_Integer := RightVal;
+      MinCode : Integer := 0; -- 0: safe, 1: possible illegal, 2: confirmed illegal
+      MaxCode : Integer := 0;
+   begin
+      
+      if LongMin < Long_Long_Integer(Addr'First) then
+         MinCode := 1;
+      elsif LongMin > Long_Long_Integer(Addr'Last) then
+         MinCode := 2;
+      else
+         MinCode := 0;
+      end if;
+      
+      if LongMax > Long_Long_Integer(Addr'Last) then
+         MaxCode := 1;
+      elsif LongMax < Long_Long_Integer(Addr'First) then
+         MaxCode := 2;
+      else
+         MaxCode := 0;
+      end if;
+      
+      if MinCode = 2 or MaxCode = 2 then
+         Code := 2;
+      elsif MinCode = 0 and MaxCode = 0 then
+         Code := 0;
+      else
+         Code := 1;
+      end if;
+   
+   end AddrValidation;
    
    -- static check of the program
    -- In this analysis, we only check that if the whole program contains "RET" or not.
@@ -417,41 +452,31 @@ package body Machine with SPARK_Mode is
                   end if;
                elsif RegFlag(Inst.AddRs1) and not RegFlag(Inst.AddRs2) then
                   if RegLeft(Inst.AddRs1) < RegRight(Inst.AddRs1) then
-                     if Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) > Long_Integer(DataVal'Last) 
-                       or Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) < Long_Integer(DataVal'First) then
+                     RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.AddRs1) + Regs(Inst.AddRs2)),
+                            Left1Right2  => Long_Long_Integer(RegLeft(Inst.AddRs1) + Regs(Inst.AddRs2)),
+                            Right1Left2  => Long_Long_Integer(RegRight(Inst.AddRs1) + Regs(Inst.AddRs2)),
+                            Right1Right2 => Long_Long_Integer(RegRight(Inst.AddRs1) + Regs(Inst.AddRs2)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.AddRd) := Min;
+                        RegRight(Inst.AddRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.AddRd) := Min;
+                        RegRight(Inst.AddRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
                         -- register value out of range
                         Result := True;
                         Ret := IllegalProgram;
                         exit;
-                     elsif Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) <= Long_Integer(DataVal'First) 
-                       and Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) >= Long_Integer(DataVal'First)
-                       and Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) <= Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.AddRd) := DataVal'First;
-                        RegRight(Inst.AddRd) := RegRight(Inst.AddRs1) + Regs(Inst.AddRs2);
-                        -- print the warning message
-                        LogWarning(Counter, Inst);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                        Result := True;
-                        
-
-                     elsif Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) > Long_Integer(DataVal'First) 
-                       and Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) < Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.AddRd) := RegLeft(Inst.AddRs1) + Regs(Inst.AddRs2);
-                        RegRight(Inst.AddRd) := RegRight(Inst.AddRs1) + Regs(Inst.AddRs2);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                     elsif Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) <= Long_Integer(DataVal'Last)
-                       and Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) >= Long_Integer(DataVal'First)
-                       and Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(Regs(Inst.AddRs2)) >= Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.AddRd) := RegLeft(Inst.AddRs1) + Regs(Inst.AddRs2);
-                        RegRight(Inst.AddRd) := DataVal'Last;
-                        -- print the warning message
-                        LogWarning(Counter, Inst);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                        Result := True;
-                        
                      end if;
                   end if;
                   
@@ -459,90 +484,62 @@ package body Machine with SPARK_Mode is
                   RegFlag(Inst.AddRd) := True;
                elsif not RegFlag(Inst.AddRs1) and RegFlag(Inst.AddRs2) then
                   if Long_Integer(RegLeft(Inst.AddRs2)) < Long_Integer(RegRight(Inst.AddRs2)) then
-                     if Long_Integer(RegLeft(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) > Long_Integer(DataVal'Last) 
-                       or Long_Integer(RegRight(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) < Long_Integer(DataVal'First) then
+                     RegMinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.AddRs1) + RegLeft(Inst.AddRs2)),
+                            Left1Right2  => Long_Long_Integer(Regs(Inst.AddRs1) + RegRight(Inst.AddRs2)),
+                            Right1Left2  => Long_Long_Integer(Regs(Inst.AddRs1) + RegLeft(Inst.AddRs2)),
+                            Right1Right2 => Long_Long_Integer(Regs(Inst.AddRs1) + RegRight(Inst.AddRs2)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.AddRd) := Min;
+                        RegRight(Inst.AddRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.AddRd) := Min;
+                        RegRight(Inst.AddRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
                         -- register value out of range
                         Result := True;
                         Ret := IllegalProgram;
                         exit;
-                     elsif Long_Integer(RegLeft(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) <= Long_Integer(DataVal'First) 
-                       and Long_Integer(RegRight(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) >= Long_Integer(DataVal'First)
-                       and Long_Integer(RegRight(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) <= Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.AddRd) := DataVal'First;
-                        RegRight(Inst.AddRd) := RegRight(Inst.AddRs2) + Regs(Inst.AddRs1);
-                        -- print the warning message
-                        LogWarning(Counter, Inst);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                        Result := True;
-                        
-                     elsif Long_Integer(RegLeft(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) > Long_Integer(DataVal'First) 
-                       and Long_Integer(RegRight(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) < Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.AddRd) := RegLeft(Inst.AddRs2) + Regs(Inst.AddRs1);
-                        RegRight(Inst.AddRd) := RegRight(Inst.AddRs2) + Regs(Inst.AddRs1);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                     elsif Long_Integer(RegLeft(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) <= Long_Integer(DataVal'Last)
-                       and Long_Integer(RegLeft(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) >= Long_Integer(DataVal'First)
-                       and Long_Integer(RegRight(Inst.AddRs2)) + Long_Integer(Regs(Inst.AddRs1)) >= Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.AddRd) := RegLeft(Inst.AddRs2) + Regs(Inst.AddRs1);
-                        RegRight(Inst.AddRd) := DataVal'Last;
-                        -- print the warning message
-                        LogWarning(Counter, Inst);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                        Result := True;
-                        
                      end if;
                   end if;
                   
                   -- the state of Reg becomes unknown
                   RegFlag(Inst.AddRd) := True;
                else
-                  if Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(RegLeft(Inst.AddRs2)) > Long_Integer(DataVal'Last)
-                    or Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(RegRight(Inst.AddRs2)) < Long_Integer(DataVal'First) then
+                  RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.AddRs1) + RegLeft(Inst.AddRs2)),
+                         Left1Right2  => Long_Long_Integer(RegLeft(Inst.AddRs1) + RegRight(Inst.AddRs2)),
+                         Right1Left2  => Long_Long_Integer(RegRight(Inst.AddRs1) + RegLeft(Inst.AddRs2)),
+                         Right1Right2 => Long_Long_Integer(RegRight(Inst.AddRs1) + RegRight(Inst.AddRs2)),
+                         Min          => Min,
+                         Max          => Max,
+                         Code         => Code);
+                  
+                  if Code = 0 then
+                     RegLeft(Inst.AddRd) := Min;
+                     RegRight(Inst.AddRd) := Max;
+                     IncDetectionPC(Ret,1,Counter);
+                  elsif Code = 1 then 
+                     RegLeft(Inst.AddRd) := Min;
+                     RegRight(Inst.AddRd) := Max;                        
+                     -- print the warning message
+                     LogWarning(Counter, Inst);
+                     IncDetectionPC(Ret,1,Counter);
+                        
+                     Result := True;
+                  else
                      -- register value out of range
                      Result := True;
                      Ret := IllegalProgram;
                      exit;
-                  elsif Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(RegLeft(Inst.AddRs2)) < Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(RegRight(Inst.AddRs2)) > Long_Integer(DataVal'Last) then
-                     RegLeft(Inst.AddRd) := DataVal'First;
-                     RegRight(Inst.AddRd) := DataVal'Last;
-                     -- print the warning message
-                     LogWarning(Counter, Inst);
-                     IncDetectionPC(Ret,1,Counter);
-                     
-                     Result := True;
-                        
-                  elsif Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(RegLeft(Inst.AddRs2)) <= Long_Integer(DataVal'Last)
-                    and Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(RegLeft(Inst.AddRs2)) >= Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(RegRight(Inst.AddRs2)) >= Long_Integer(DataVal'Last) then
-                     RegLeft(Inst.AddRd) := RegLeft(Inst.AddRs1) + RegLeft(Inst.AddRs2);
-                     RegRight(Inst.AddRd) := DataVal'Last;
-                     -- print the warning message
-                     LogWarning(Counter, Inst);
-                     IncDetectionPC(Ret,1,Counter);
-                     
-                     Result := True;
-                        
-                  elsif Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(RegLeft(Inst.AddRs2)) <= Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(RegRight(Inst.AddRs2)) >= Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(RegRight(Inst.AddRs2)) <= Long_Integer(DataVal'Last) then
-                     RegLeft(Inst.AddRd) := DataVal'First;
-                     RegRight(Inst.AddRd) := RegRight(Inst.AddRs1) + RegRight(Inst.AddRs2);
-                     -- print the warning message
-                     LogWarning(Counter, Inst);
-                     IncDetectionPC(Ret,1,Counter);
-                     
-                     Result := True;
-                       
-                  elsif Long_Integer(RegLeft(Inst.AddRs1)) + Long_Integer(RegLeft(Inst.AddRs2)) >= Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.AddRs1)) + Long_Integer(RegRight(Inst.AddRs2)) <= Long_Integer(DataVal'Last) then
-                     RegLeft(Inst.AddRd) := RegLeft(Inst.AddRs1) + RegLeft(Inst.AddRs2);
-                     RegRight(Inst.AddRd) := RegRight(Inst.AddRs1) + RegRight(Inst.AddRs2);
-                     IncDetectionPC(Ret,1,Counter);
-                     
                   end if;
                      
                   -- the state of Reg becomes unknown
@@ -566,40 +563,31 @@ package body Machine with SPARK_Mode is
                  
                elsif RegFlag(Inst.SubRs1) and not RegFlag(Inst.SubRs2) then
                   if RegLeft(Inst.SubRs1) < RegRight(Inst.SubRs1) then
-                     if Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) > Long_Integer(DataVal'Last) 
-                       or Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) < Long_Integer(DataVal'First) then
+                     RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.SubRs1) - Regs(Inst.SubRs2)),
+                            Left1Right2  => Long_Long_Integer(RegLeft(Inst.SubRs1) - Regs(Inst.SubRs2)),
+                            Right1Left2  => Long_Long_Integer(RegRight(Inst.SubRs1) - Regs(Inst.SubRs2)),
+                            Right1Right2 => Long_Long_Integer(RegRight(Inst.SubRs1) - Regs(Inst.SubRs2)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.SubRd) := Min;
+                        RegRight(Inst.SubRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.SubRd) := Min;
+                        RegRight(Inst.SubRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
                         -- register value out of range
                         Result := True;
                         Ret := IllegalProgram;
                         exit;
-                     elsif Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) <= Long_Integer(DataVal'First) 
-                       and Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) >= Long_Integer(DataVal'First)
-                       and Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) <= Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.SubRd) := DataVal'First;
-                        RegRight(Inst.SubRd) := RegRight(Inst.SubRs1) - Regs(Inst.SubRs2);
-                        -- print the warning message
-                        LogWarning(Counter, Inst);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                        Result := True;
-                        
-                     elsif Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) > Long_Integer(DataVal'First) 
-                       and Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) < Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.SubRd) := RegLeft(Inst.SubRs1) - Regs(Inst.SubRs2);
-                        RegRight(Inst.SubRd) := RegRight(Inst.SubRs1) - Regs(Inst.SubRs2);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                     elsif Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) <= Long_Integer(DataVal'Last)
-                       and Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) >= Long_Integer(DataVal'First)
-                       and Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(Regs(Inst.SubRs2)) >= Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.SubRd) := RegLeft(Inst.SubRs1) - Regs(Inst.SubRs2);
-                        RegRight(Inst.SubRd) := DataVal'Last;
-                        -- print the warning message
-                        LogWarning(Counter, Inst);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                        Result := True;
-                        
                      end if;
                   end if;
                   
@@ -607,91 +595,62 @@ package body Machine with SPARK_Mode is
                   RegFlag(Inst.SubRd) := True;
                elsif not RegFlag(Inst.SubRs1) and RegFlag(Inst.SubRs2) then
                   if RegLeft(Inst.SubRs1) < RegRight(Inst.SubRs1) then
-                     if Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) > Long_Integer(DataVal'Last) 
-                       or Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) < Long_Integer(DataVal'First) then
+                     RegMinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.SubRs1) - RegLeft(Inst.SubRs2)),
+                            Left1Right2  => Long_Long_Integer(Regs(Inst.SubRs1) - RegRight(Inst.SubRs2)),
+                            Right1Left2  => Long_Long_Integer(Regs(Inst.SubRs1) - RegLeft(Inst.SubRs2)),
+                            Right1Right2 => Long_Long_Integer(Regs(Inst.SubRs1) - RegRight(Inst.SubRs2)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.SubRd) := Min;
+                        RegRight(Inst.SubRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.SubRd) := Min;
+                        RegRight(Inst.SubRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
                         -- register value out of range
                         Result := True;
                         Ret := IllegalProgram;
                         exit;
-                     elsif Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) <= Long_Integer(DataVal'First) 
-                       and Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) >= Long_Integer(DataVal'First)
-                       and Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) <= Long_Integer(DataVal'Last)
-                     then
-                        RegLeft(Inst.SubRd) := DataVal'First;
-                        RegRight(Inst.SubRd) := Regs(Inst.SubRs1) - RegLeft(Inst.SubRs2);
-                        -- print the warning message
-                        LogWarning(Counter, Inst);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                        Result := True;
-                       
-                     elsif Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) > Long_Integer(DataVal'First) 
-                       and Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) < Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.SubRd) := Regs(Inst.SubRs1) - RegRight(Inst.SubRs2);
-                        RegRight(Inst.SubRd) := Regs(Inst.SubRs1) - RegLeft(Inst.SubRs2);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                     elsif Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) <= Long_Integer(DataVal'Last)
-                       and Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) >= Long_Integer(DataVal'First)
-                       and Long_Integer(Regs(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) >= Long_Integer(DataVal'Last) then
-                        RegLeft(Inst.SubRd) := Regs(Inst.SubRs1) - RegRight(Inst.SubRs2);
-                        RegRight(Inst.SubRd) := DataVal'Last;
-                        -- print the warning message
-                        LogWarning(Counter, Inst);
-                        IncDetectionPC(Ret,1,Counter);
-                        
-                        Result := True;
-                        
                      end if;
                   end if;
                   
                   -- the state of Reg becomes unknown
                   RegFlag(Inst.SubRd) := True;
                else
-                  if Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) > Long_Integer(DataVal'Last)
-                    or Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) < Long_Integer(DataVal'First) then
+                  RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.SubRs1) - RegLeft(Inst.SubRs2)),
+                         Left1Right2  => Long_Long_Integer(RegLeft(Inst.SubRs1) - RegRight(Inst.SubRs2)),
+                         Right1Left2  => Long_Long_Integer(RegRight(Inst.SubRs1) - RegLeft(Inst.SubRs2)),
+                         Right1Right2 => Long_Long_Integer(RegRight(Inst.SubRs1) - RegRight(Inst.SubRs2)),
+                         Min          => Min,
+                         Max          => Max,
+                         Code         => Code);
+                  
+                  if Code = 0 then
+                     RegLeft(Inst.SubRd) := Min;
+                     RegRight(Inst.SubRd) := Max;
+                     IncDetectionPC(Ret,1,Counter);
+                  elsif Code = 1 then 
+                     RegLeft(Inst.SubRd) := Min;
+                     RegRight(Inst.SubRd) := Max;                        
+                     -- print the warning message
+                     LogWarning(Counter, Inst);
+                     IncDetectionPC(Ret,1,Counter);
+                        
+                     Result := True;
+                  else
                      -- register value out of range
                      Result := True;
                      Ret := IllegalProgram;
                      exit;
-                  elsif Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) < Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) > Long_Integer(DataVal'Last) then
-                     RegLeft(Inst.SubRd) := DataVal'First;
-                     RegRight(Inst.SubRd) := DataVal'Last;
-                     -- print the warning message
-                     LogWarning(Counter, Inst);
-                     IncDetectionPC(Ret,1,Counter);
-                     
-                     Result := True;
-                        
-                  elsif Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) <= Long_Integer(DataVal'Last)
-                    and Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) >= Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) >= Long_Integer(DataVal'Last) then
-                     RegLeft(Inst.SubRd) := RegLeft(Inst.SubRs1) - RegRight(Inst.SubRs2);
-                     RegRight(Inst.SubRd) := DataVal'Last;
-                     -- print the warning message
-                     LogWarning(Counter, Inst);
-                     IncDetectionPC(Ret,1,Counter);
-                     
-                     Result := True;
-                        
-                  elsif Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) <= Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) >= Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) <= Long_Integer(DataVal'Last) then
-                     RegLeft(Inst.SubRd) := DataVal'First;
-                     RegRight(Inst.SubRd) := RegRight(Inst.SubRs1) - RegLeft(Inst.SubRs2);
-                     -- print the warning message
-                     LogWarning(Counter, Inst);
-                     IncDetectionPC(Ret,1,Counter);
-                     
-                     Result := True;
-                        
-                  elsif Long_Integer(RegLeft(Inst.SubRs1)) - Long_Integer(RegRight(Inst.SubRs2)) >= Long_Integer(DataVal'First)
-                    and Long_Integer(RegRight(Inst.SubRs1)) - Long_Integer(RegLeft(Inst.SubRs2)) <= Long_Integer(DataVal'Last) then
-                     RegLeft(Inst.SubRd) := RegLeft(Inst.SubRs1) - RegRight(Inst.SubRs2);
-                     RegRight(Inst.SubRd) := RegRight(Inst.SubRs1) - RegLeft(Inst.SubRs2);
-                     IncDetectionPC(Ret,1,Counter);
-                     
                   end if;
                      
                   -- the state of Reg becomes unknown
@@ -715,7 +674,7 @@ package body Machine with SPARK_Mode is
                elsif RegFlag(Inst.MulRs1) and not RegFlag(Inst.MulRs2) then
                   if RegLeft(Inst.MulRs1) < RegRight(Inst.MulRs1) then
                      
-                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.MulRs1) * Regs(Inst.MulRs2)),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.MulRs1) * Regs(Inst.MulRs2)),
                             Left1Right2  => Long_Long_Integer(RegLeft(Inst.MulRs1) * Regs(Inst.MulRs2)),
                             Right1Left2  => Long_Long_Integer(RegRight(Inst.MulRs1) * Regs(Inst.MulRs2)),
                             Right1Right2 => Long_Long_Integer(RegRight(Inst.MulRs1) * Regs(Inst.MulRs2)),
@@ -747,10 +706,9 @@ package body Machine with SPARK_Mode is
                   RegFlag(Inst.MulRd) := True;
                elsif not RegFlag(Inst.MulRs1) and RegFlag(Inst.MulRs2) then
                   
-                  
                   if Long_Integer(RegLeft(Inst.MulRs2)) < Long_Integer(RegRight(Inst.MulRs2)) then
                      
-                     MinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.MulRs1) * RegLeft(Inst.MulRs2)),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.MulRs1) * RegLeft(Inst.MulRs2)),
                             Left1Right2  => Long_Long_Integer(Regs(Inst.MulRs1) * RegRight(Inst.MulRs2)),
                             Right1Left2  => Long_Long_Integer(Regs(Inst.MulRs1) * RegLeft(Inst.MulRs2)),
                             Right1Right2 => Long_Long_Integer(Regs(Inst.MulRs1) * RegRight(Inst.MulRs2)),
@@ -780,7 +738,7 @@ package body Machine with SPARK_Mode is
                   -- the state of Reg becomes unknown
                   RegFlag(Inst.MulRd) := True;
                else
-                  MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.MulRs1) * RegLeft(Inst.MulRs2)),
+                  RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.MulRs1) * RegLeft(Inst.MulRs2)),
                          Left1Right2  => Long_Long_Integer(RegLeft(Inst.MulRs1) * RegRight(Inst.MulRs2)),
                          Right1Left2  => Long_Long_Integer(RegRight(Inst.MulRs1) * RegLeft(Inst.MulRs2)),
                          Right1Right2 => Long_Long_Integer(RegRight(Inst.MulRs1) * RegRight(Inst.MulRs2)),
@@ -827,10 +785,12 @@ package body Machine with SPARK_Mode is
                      -- valid behavior
                      Regs(Inst.DivRd) := Regs(Inst.DivRs1) / Regs(Inst.DivRs2);
                      IncDetectionPC(Ret,1,Counter);
+                     -- the state of Reg becomes known
+                     RegFlag(Inst.DivRd) := False;
                   end if;
                elsif RegFlag(Inst.DivRs1) and not RegFlag(Inst.DivRs2) then
                   if Integer(Regs(Inst.DivRs2)) /= 0 then
-                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / Regs(Inst.DivRs2)),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / Regs(Inst.DivRs2)),
                             Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1) / Regs(Inst.DivRs2)),
                             Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / Regs(Inst.DivRs2)),
                             Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1) / Regs(Inst.DivRs2)),
@@ -866,7 +826,7 @@ package body Machine with SPARK_Mode is
                   RegFlag(Inst.DivRd) := True;
                elsif not RegFlag(Inst.DivRs1) and RegFlag(Inst.DivRs2) then
                   if Integer(RegRight(Inst.DivRs2)) < 0 or Integer(RegLeft(Inst.DivRs2)) > 0 then
-                     MinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
                             Left1Right2  => Long_Long_Integer(Regs(Inst.DivRs1) / RegRight(Inst.DivRs2)),
                             Right1Left2  => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
                             Right1Right2 => Long_Long_Integer(Regs(Inst.DivRs1) / RegRight(Inst.DivRs2)),
@@ -893,7 +853,7 @@ package body Machine with SPARK_Mode is
                         exit;
                      end if;
                   elsif Integer(RegRight(Inst.DivRs2)) = 0 then
-                     MinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
                             Left1Right2  => Long_Long_Integer(Regs(Inst.DivRs1)) / Long_Long_Integer(-1),
                             Right1Left2  => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
                             Right1Right2 => Long_Long_Integer(Regs(Inst.DivRs1)) / Long_Long_Integer(-1),
@@ -920,7 +880,7 @@ package body Machine with SPARK_Mode is
                         exit;
                      end if;
                   elsif Integer(RegLeft(Inst.DivRs2)) = 0 then
-                     MinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
                             Left1Right2  => Long_Long_Integer(Regs(Inst.DivRs1) / RegRight(Inst.DivRs2)),
                             Right1Left2  => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
                             Right1Right2 => Long_Long_Integer(Regs(Inst.DivRs1) / RegRight(Inst.DivRs2)),
@@ -947,7 +907,7 @@ package body Machine with SPARK_Mode is
                         exit;
                      end if;
                   else
-                     MinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
                             Left1Right2  => Long_Long_Integer(Regs(Inst.DivRs1)) / Long_Long_Integer(-1),
                             Right1Left2  => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
                             Right1Right2 => Long_Long_Integer(Regs(Inst.DivRs1)) / Long_Long_Integer(-1),
@@ -978,7 +938,7 @@ package body Machine with SPARK_Mode is
                   RegFlag(Inst.DivRd) := True;
                else
                   if Integer(RegRight(Inst.DivRs2)) < 0 or Integer(RegLeft(Inst.DivRs2)) > 0 then
-                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
                             Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegRight(Inst.DivRs2)),
                             Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
                             Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1) / RegRight(Inst.DivRs2)),
@@ -1005,7 +965,7 @@ package body Machine with SPARK_Mode is
                         exit;
                      end if;
                   elsif Integer(RegRight(Inst.DivRs2)) = 0 then
-                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
                             Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1)) / Long_Long_Integer(-1),
                             Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
                             Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1)) / Long_Long_Integer(-1),
@@ -1032,7 +992,7 @@ package body Machine with SPARK_Mode is
                         exit;
                      end if;
                   elsif Integer(RegLeft(Inst.DivRs2)) = 0 then
-                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / 1),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / 1),
                             Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegRight(Inst.DivRs2)),
                             Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / 1),
                             Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1) / RegRight(Inst.DivRs2)),
@@ -1059,10 +1019,10 @@ package body Machine with SPARK_Mode is
                         exit;
                      end if;
                   else
-                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / 1),
+                     RegMinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / 1),
                             Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1)) / Long_Long_Integer(-1),
                             Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / 1),
-                            Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1) / (-1)),
+                            Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1)) / Long_Long_Integer(-1),
                             Min          => Min,
                             Max          => Max,
                             Code         => Code);
@@ -1089,43 +1049,95 @@ package body Machine with SPARK_Mode is
                   -- the state of Reg becomes unknown
                   RegFlag(Inst.DivRd) := True;
                end if;
-            when LDR =>               
-               if Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) > Long_Integer(Addr'Last) 
-                 or Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) < Long_Integer(Addr'First) then
-                  -- memory address out of range
-                  Result := True;
-                  Ret := IllegalProgram;
-                  exit;
+            when LDR =>
+               if not RegFlag(Inst.LdrRs) then
+                  if Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) > Long_Integer(Addr'Last) 
+                    or Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) < Long_Integer(Addr'First) then
+                     -- memory address out of range
+                     Result := True;
+                     Ret := IllegalProgram;
+                     exit;
+                  else
+                     if Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) > Integer(DataVal'Last) 
+                       or Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) < Integer(DataVal'First) then
+                        -- Since the initial value in a memory is unknown, 
+                        -- so it is possible that the value in the memory (Ldr + Offs) 
+                        -- makes a register value out of range.
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     else
+                        -- valid behavior
+                        Address := Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs));
+                   
+                        if not MemoryFlag(Address) then
+                           Regs(Inst.LdrRd) := Memory(Address);
+                           IncDetectionPC(Ret,1,Counter);
+                        else
+                           -- print the warning message
+                           LogWarning(Counter, Inst);
+                           IncDetectionPC(Ret,1,Counter);
+                        
+                           Result := True;
+                        end if;
+                     end if;
+                  end if;
                else
-                  if Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) > Integer(DataVal'Last) 
-                    or Integer(Memory(Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs)))) < Integer(DataVal'First) then
-                     -- Since the initial value in a memory is unknown, 
-                     -- so it is possible that the value in the memory (Ldr + Offs) 
-                     -- makes a register value out of range.
+                  AddrValidation(LeftVal  => Long_Long_Integer(RegLeft(Inst.LdrRs)) + Long_Long_Integer(DataVal(Inst.LdrOffs)),
+                                 RightVal => Long_Long_Integer(RegRight(Inst.LdrRs)) + Long_Long_Integer(DataVal(Inst.LdrOffs)),
+                                 Code     => Code);
+                    
+                  if Code = 0 then
+                     IncDetectionPC(Ret,1,Counter);
+                  elsif Code = 1 then                      
+                     -- print the warning message
+                     LogWarning(Counter, Inst);
+                     IncDetectionPC(Ret,1,Counter);
+                        
+                     Result := True;
+                  else
+                     -- memory address out of range
+                     Result := True;
+                     Ret := IllegalProgram;
+                     exit;
+                  end if;
+               end if;
+            when STR =>
+               if not RegFlag(Inst.StrRa) then
+                  if Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) > Long_Integer(Addr'Last) 
+                    or Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) < Long_Integer(Addr'First) then
+                     -- memory address out of range
                      Result := True;
                      Ret := IllegalProgram;
                      exit;
                   else
                      -- valid behavior
-                     Address := Addr(Regs(Inst.LdrRs) + DataVal(Inst.LdrOffs));
-                   
-                     Regs(Inst.LdrRd) := Memory(Address);
-                     IncDetectionPC(Ret,1,Counter);
-                  end if;
-               end if;
-            when STR =>
-               if Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) > Long_Integer(Addr'Last) 
-                 or Long_Integer(Regs(Inst.StrRa)) + Long_Integer(DataVal(Inst.StrOffs)) < Long_Integer(Addr'First) then
-                  -- memory address out of range
-                  Result := True;
-                  Ret := IllegalProgram;
-                  exit;
-               else
-                  -- valid behavior
-                  Address := Addr(Regs(Inst.StrRa) + DataVal(Inst.StrOffs));
+                     Address := Addr(Regs(Inst.StrRa) + DataVal(Inst.StrOffs));
                   
-                  Memory(Address) := Regs(Inst.StrRb);
-                  IncDetectionPC(Ret,1,Counter);
+                     Memory(Address) := Regs(Inst.StrRb);
+                     IncDetectionPC(Ret,1,Counter);
+                     
+                     MemoryFlag(Address) := False;
+                  end if;
+               else
+                  AddrValidation(LeftVal  => Long_Long_Integer(RegLeft(Inst.StrRa)) + Long_Long_Integer(DataVal(Inst.StrOffs)),
+                                 RightVal => Long_Long_Integer(RegRight(Inst.StrRa)) + Long_Long_Integer(DataVal(Inst.StrOffs)),
+                                 Code     => Code);
+                    
+                  if Code = 0 then
+                     IncDetectionPC(Ret,1,Counter);
+                  elsif Code = 1 then                      
+                     -- print the warning message
+                     LogWarning(Counter, Inst);
+                     IncDetectionPC(Ret,1,Counter);
+                        
+                     Result := True;
+                  else
+                     -- memory address out of range
+                     Result := True;
+                     Ret := IllegalProgram;
+                     exit;
+                  end if;
                end if;
             when MOV =>
                if Integer(Inst.MovOffs) > Integer(DataVal'Last) 
@@ -1155,31 +1167,60 @@ package body Machine with SPARK_Mode is
                   exit;
                elsif Integer(Inst.JmpOffs) = 0 then
                   -- infinite loop
-                  --                    Result := False;
                   exit;
                else
                   -- valid behavior
                   IncDetectionPC(Ret,Inst.JmpOffs,Counter);
                end if;
             when JZ =>
-               if Regs(Inst.JzRa) = 0 then
-                  if Integer(Inst.JzOffs) + Integer(Counter) >= MAX_PROGRAM_LENGTH 
-                    or Integer(Counter) + Integer(Inst.JzOffs) <= 0 then
-                     -- jump out of the program
-                     Result := True;
-                     Ret := IllegalProgram;
-                     exit;
-                  elsif Integer(Inst.JzOffs) = 0 then
-                     -- infinite loop
-                     --                       Result := False;
-                     exit;
+               if not RegFlag(Inst.JzRa) then
+                  if Regs(Inst.JzRa) = 0 then
+                     if Integer(Inst.JzOffs) + Integer(Counter) >= MAX_PROGRAM_LENGTH 
+                       or Integer(Counter) + Integer(Inst.JzOffs) <= 0 then
+                        -- jump out of the program
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     elsif Integer(Inst.JzOffs) = 0 then
+                        -- infinite loop
+                        exit;
+                     else
+                        -- valid behavior (jump to the next "JzOffs" line)
+                        IncDetectionPC(Ret,Inst.JzOffs,Counter);
+                     end if;
                   else
-                     -- valid behavior (jump to the next "JzOffs" line)
-                     IncDetectionPC(Ret,Inst.JzOffs,Counter);
+                     -- valid behavior (jump to the next line)
+                     IncDetectionPC(Ret,1,Counter);
                   end if;
                else
-                  -- valid behavior (jump to the next line)
-                  IncDetectionPC(Ret,1,Counter);
+                  if RegLeft(Inst.JzRa) > 0 or RegRight(Inst.JzRa) < 0 then
+                     IncDetectionPC(Ret,1,Counter);
+                  else
+                     if Integer(Inst.JzOffs) + Integer(Counter) >= MAX_PROGRAM_LENGTH 
+                       or Integer(Counter) + Integer(Inst.JzOffs) <= 0 then
+                        -- jump out of the program
+                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+
+                     elsif Integer(Inst.JzOffs) = 0 then
+                        -- infinite loop
+                        IncDetectionPC(Ret,1,Counter);
+                        exit;
+                     elsif 1 + Integer(Counter) >= MAX_PROGRAM_LENGTH then
+                         -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- valid behavior (jump to the next "JzOffs" line)
+                        IncDetectionPC(Ret,Inst.JzOffs,Counter);
+                     end if;
+                  end if;
                end if;
             when NOP =>
                -- valid behavior
