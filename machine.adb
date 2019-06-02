@@ -811,21 +811,283 @@ package body Machine with SPARK_Mode is
                   RegFlag(Inst.MulRd) := True;
 
                end if;
-            when DIV =>               
-               if Integer(Regs(Inst.DivRs2)) = 0 then
-                  -- the divisor is 0
-                  Result := True;
-                  Ret := IllegalProgram;
-                  exit;
-               elsif (Integer(Regs(Inst.DivRs2)) = -1 and Integer(Regs(Inst.DivRs1)) = Integer(DataVal'First)) then
-                  -- -2^31/-1 = 2^31, which is larger than the largest value that can be stored in a register (2^31-1).
-                  Result := True;
-                  Ret := IllegalProgram;
-                  exit;
+            when DIV =>
+               if not RegFlag(Inst.DivRs1) and not RegFlag(Inst.DivRs2) then
+                  if Integer(Regs(Inst.DivRs2)) = 0 then
+                     -- the divisor is 0
+                     Result := True;
+                     Ret := IllegalProgram;
+                     exit;
+                  elsif (Integer(Regs(Inst.DivRs2)) = -1 and Integer(Regs(Inst.DivRs1)) = Integer(DataVal'First)) then
+                     -- -2^31/-1 = 2^31, which is larger than the largest value that can be stored in a register (2^31-1).
+                     Result := True;
+                     Ret := IllegalProgram;
+                     exit;
+                  else
+                     -- valid behavior
+                     Regs(Inst.DivRd) := Regs(Inst.DivRs1) / Regs(Inst.DivRs2);
+                     IncDetectionPC(Ret,1,Counter);
+                  end if;
+               elsif RegFlag(Inst.DivRs1) and not RegFlag(Inst.DivRs2) then
+                  if Integer(Regs(Inst.DivRs2)) /= 0 then
+                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / Regs(Inst.DivRs2)),
+                            Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1) / Regs(Inst.DivRs2)),
+                            Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / Regs(Inst.DivRs2)),
+                            Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1) / Regs(Inst.DivRs2)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- register value out of range
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     end if;
+                  else
+                     -- register value out of range
+                     Result := True;
+                     Ret := IllegalProgram;
+                     exit;
+                  end if;
+                  -- the state of Reg becomes unknown
+                  RegFlag(Inst.DivRd) := True;
+               elsif not RegFlag(Inst.DivRs1) and RegFlag(Inst.DivRs2) then
+                  if Integer(RegRight(Inst.DivRs2)) < 0 or Integer(RegLeft(Inst.DivRs2)) > 0 then
+                     MinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                            Left1Right2  => Long_Long_Integer(Regs(Inst.DivRs1) / RegRight(Inst.DivRs2)),
+                            Right1Left2  => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                            Right1Right2 => Long_Long_Integer(Regs(Inst.DivRs1) / RegRight(Inst.DivRs2)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- register value out of range
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     end if;
+                  elsif Integer(RegRight(Inst.DivRs2)) = 0 then
+                     MinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                            Left1Right2  => Long_Long_Integer(Regs(Inst.DivRs1)) / Long_Long_Integer(-1),
+                            Right1Left2  => Long_Long_Integer(Regs(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                            Right1Right2 => Long_Long_Integer(Regs(Inst.DivRs1)) / Long_Long_Integer(-1),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- register value out of range
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     end if;
+                  elsif Integer(RegLeft(Inst.DivRs2)) = 0 then
+                     MinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
+                            Left1Right2  => Long_Long_Integer(Regs(Inst.DivRs1) / RegRight(Inst.DivRs2)),
+                            Right1Left2  => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
+                            Right1Right2 => Long_Long_Integer(Regs(Inst.DivRs1) / RegRight(Inst.DivRs2)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- register value out of range
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     end if;
+                  else
+                     MinMax(Left1Left2   => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
+                            Left1Right2  => Long_Long_Integer(Regs(Inst.DivRs1)) / Long_Long_Integer(-1),
+                            Right1Left2  => Long_Long_Integer(Regs(Inst.DivRs1) / 1),
+                            Right1Right2 => Long_Long_Integer(Regs(Inst.DivRs1)) / Long_Long_Integer(-1),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- register value out of range
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     end if;
+                  end if;
+                  -- the state of Reg becomes unknown
+                  RegFlag(Inst.DivRd) := True;
                else
-                  -- valid behavior
-                  Regs(Inst.DivRd) := Regs(Inst.DivRs1) / Regs(Inst.DivRs2);
-                  IncDetectionPC(Ret,1,Counter);
+                  if Integer(RegRight(Inst.DivRs2)) < 0 or Integer(RegLeft(Inst.DivRs2)) > 0 then
+                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                            Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegRight(Inst.DivRs2)),
+                            Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                            Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1) / RegRight(Inst.DivRs2)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- register value out of range
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     end if;
+                  elsif Integer(RegRight(Inst.DivRs2)) = 0 then
+                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                            Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1)) / Long_Long_Integer(-1),
+                            Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / RegLeft(Inst.DivRs2)),
+                            Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1)) / Long_Long_Integer(-1),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- register value out of range
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     end if;
+                  elsif Integer(RegLeft(Inst.DivRs2)) = 0 then
+                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / 1),
+                            Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1) / RegRight(Inst.DivRs2)),
+                            Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / 1),
+                            Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1) / RegRight(Inst.DivRs2)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- register value out of range
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     end if;
+                  else
+                     MinMax(Left1Left2   => Long_Long_Integer(RegLeft(Inst.DivRs1) / 1),
+                            Left1Right2  => Long_Long_Integer(RegLeft(Inst.DivRs1)) / Long_Long_Integer(-1),
+                            Right1Left2  => Long_Long_Integer(RegRight(Inst.DivRs1) / 1),
+                            Right1Right2 => Long_Long_Integer(RegRight(Inst.DivRs1) / (-1)),
+                            Min          => Min,
+                            Max          => Max,
+                            Code         => Code);
+                     
+                     if Code = 0 then
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;
+                        IncDetectionPC(Ret,1,Counter);
+                     elsif Code = 1 then 
+                        RegLeft(Inst.DivRd) := Min;
+                        RegRight(Inst.DivRd) := Max;                        
+                        -- print the warning message
+                        LogWarning(Counter, Inst);
+                        IncDetectionPC(Ret,1,Counter);
+                        
+                        Result := True;
+                     else
+                        -- register value out of range
+                        Result := True;
+                        Ret := IllegalProgram;
+                        exit;
+                     end if;
+                  end if;
+                  -- the state of Reg becomes unknown
+                  RegFlag(Inst.DivRd) := True;
                end if;
             when LDR =>               
                if Long_Integer(Regs(Inst.LdrRs)) + Long_Integer(DataVal(Inst.LdrOffs)) > Long_Integer(Addr'Last) 
